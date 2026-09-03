@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
-    userSchema:{
+    username:{
         type: String,
         unique: [true, "User already exists"],
         required: [true, "User is required"],
