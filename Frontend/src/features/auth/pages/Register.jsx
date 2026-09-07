@@ -1,6 +1,6 @@
 import React from "react";
 
-// react page for register
+// react page for register  reguster 
 const Register = () => {
     return (
         <div>
