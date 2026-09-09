@@ -7,7 +7,7 @@ app.use(express.json())
 
 app.use(cookieParser());
 
-//require all routes here
+//require all routes here using auth router
 const authRouter = require("./routes/auth.routes");
 
 //using all  routes here
