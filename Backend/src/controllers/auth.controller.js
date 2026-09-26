@@ -5,7 +5,7 @@ const tokenBlacklistModel = require("../models/blacklist.model");
 
 
 /**
- *  controller for user sign up
+ * controller for user sign up 
  * create a new user in database
  * @name registerUserController
  * @description  register a newuser, expects username, email
