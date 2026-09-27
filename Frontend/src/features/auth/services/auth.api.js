@@ -28,7 +28,7 @@ export async function login({email, password}) {
         const response = await api.post("/api/auth/login", {
             email, password
         })
-        return responce.data 
+        return response.data
     }catch(err){
         console.log(err)
         return err.response.data
@@ -38,7 +38,7 @@ export async function login({email, password}) {
 export async function logout() {
     
     try{
-        const response = await api.post("/api/auth/logout")
+        const response = await api.get("/api/auth/logout")
         return response.data
     }catch(err){
         console.log(err)
@@ -48,7 +48,7 @@ export async function logout() {
 
 export async function getMe() {
     try {
-        const response = await api.get("/api/auth/getMe")
+        const response = await api.get("/api/auth/get-me")
         return response.data
     }catch(err){
         console.log(err)
