@@ -10,6 +10,7 @@ $text-primary:   #e6edf3;
 $text-muted:     #7d8590;
 $accent:         #ff2d78;
 $accent-alt:     #ff6b9d;
+$success:        #3fb950;
 $badge-required: #ff2d78;
 $badge-best:     #ff2d78;
 $info-bg:        #1b2a4a;
@@ -239,6 +240,52 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
         color: $text-muted;
         margin: 0;
     }
+
+    &--uploaded {
+        position: relative;
+        border-style: solid;
+        border-color: $success;
+        background-color: rgba($success, 0.06);
+
+        &:hover {
+            border-color: $success;
+            background-color: rgba($success, 0.1);
+        }
+    }
+
+    &__icon--success {
+        color: $success;
+    }
+
+    &__remove {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.6rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: $bg-card;
+        border: 1px solid $border-color;
+        border-radius: 50%;
+        color: $text-muted;
+        font-size: 1rem;
+        line-height: 1;
+        cursor: pointer;
+        transition: color 0.2s, border-color 0.2s;
+
+        &:hover {
+            color: $accent;
+            border-color: $accent;
+        }
+    }
+}
+
+.upload-error {
+    margin: 0;
+    font-size: 0.75rem;
+    color: $badge-required;
 }
 
 // ── OR Divider ────────────────────────────────────────────────────────────────
@@ -298,6 +345,14 @@ $font-stack:     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
 }
 
 // ── Generate Button ───────────────────────────────────────────────────────────
+.footer-error {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: $badge-required;
+    text-align: center;
+    flex: 1;
+}
+
 .generate-btn {
     display: flex;
     align-items: center;

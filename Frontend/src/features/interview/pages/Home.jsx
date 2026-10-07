@@ -8,13 +8,69 @@ const Home = () => {
     const { loading, generateReport,reports } = useInterview()
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
+    const [ resumeFile, setResumeFile ] = useState(null)
+    const [ uploadError, setUploadError ] = useState("")
+    const [ formError, setFormError ] = useState("")
     const resumeInputRef = useRef()
+
+    const MAX_FILE_SIZE = 5 * 1024 * 1024
 
     const navigate = useNavigate()
 
+    const handleFileChange = (e) => {
+        const file = e.target.files[ 0 ]
+        setUploadError("")
+        setFormError("")
+
+        if (!file) {
+            setResumeFile(null)
+            return
+        }
+
+        const name = file.name.toLowerCase()
+        const isPdf = file.type === "application/pdf" || name.endsWith(".pdf")
+        const isDocx = file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || name.endsWith(".docx")
+
+        if (!isPdf && !isDocx) {
+            setUploadError("Only PDF or DOCX files are allowed.")
+            e.target.value = ""
+            setResumeFile(null)
+            return
+        }
+
+        if (file.size > MAX_FILE_SIZE) {
+            setUploadError("File must be smaller than 5MB.")
+            e.target.value = ""
+            setResumeFile(null)
+            return
+        }
+
+        setResumeFile(file)
+    }
+
+    const handleRemoveFile = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        resumeInputRef.current.value = ""
+        setResumeFile(null)
+        setUploadError("")
+    }
+
     const handleGenerateReport = async () => {
-        const resumeFile = resumeInputRef.current.files[ 0 ]
+        if (!jobDescription.trim()) {
+            setFormError("Please paste the target job description first.")
+            return
+        }
+        if (!resumeFile) {
+            setFormError("Please upload your resume first.")
+            return
+        }
+        setFormError("")
         const data = await generateReport({ jobDescription, selfDescription, resumeFile })
+        if (!data) {
+            setFormError("Could not generate the report. Please try again.")
+            return
+        }
         navigate(`/interview/${data._id}`)
     }
 
@@ -75,14 +131,31 @@ const Home = () => {
                                 Upload Resume
                                 <span className='badge badge--best'>Best Results</span>
                             </label>
-                            <label className='dropzone' htmlFor='resume'>
-                                <span className='dropzone__icon'>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /></svg>
-                                </span>
-                                <p className='dropzone__title'>Click to upload or drag &amp; drop</p>
-                                <p className='dropzone__subtitle'>PDF or DOCX (Max 5MB)</p>
-                                <input ref={resumeInputRef} hidden type='file' id='resume' name='resume' accept='.pdf,.docx' />
+                            <label className={ `dropzone${resumeFile ? " dropzone--uploaded" : ""}` } htmlFor='resume'>
+                                {resumeFile ? (
+                                    <span className='dropzone__icon dropzone__icon--success'>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+                                    </span>
+                                ) : (
+                                    <span className='dropzone__icon'>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /></svg>
+                                    </span>
+                                )}
+                                {resumeFile ? (
+                                    <>
+                                        <p className='dropzone__title'>Resume uploaded</p>
+                                        <p className='dropzone__subtitle'>{resumeFile.name} &middot; {(resumeFile.size / 1024 / 1024).toFixed(2)} MB &middot; Click to replace</p>
+                                        <button type='button' className='dropzone__remove' aria-label='Remove uploaded resume' onClick={handleRemoveFile}>&times;</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className='dropzone__title'>Click to upload or drag &amp; drop</p>
+                                        <p className='dropzone__subtitle'>PDF or DOCX (Max 5MB)</p>
+                                    </>
+                                )}
+                                <input ref={resumeInputRef} hidden type='file' id='resume' name='resume' accept='.pdf,.docx' onChange={handleFileChange} />
                             </label>
+                            {uploadError && <p className='upload-error'>{uploadError}</p>}
                         </div>
 
                         {/* OR Divider */}
@@ -113,6 +186,7 @@ const Home = () => {
                 {/* Card Footer */}
                 <div className='interview-card__footer'>
                     <span className='footer-info'>AI-Powered Strategy Generation &bull; Approx 30s</span>
+                    {formError && <span className='footer-error'>{formError}</span>}
                     <button
                         onClick={handleGenerateReport}
                         className='generate-btn'>

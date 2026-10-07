@@ -22,7 +22,8 @@ async function authUser(req, res, next){
     try{
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        req.user = decoded;
+        // FIX: JWT payload only has _id; expose id too so controllers using req.user.id work correctly
+        req.user = { ...decoded, id: decoded._id };
         next();
     }catch(error){
         res.status(401).json({

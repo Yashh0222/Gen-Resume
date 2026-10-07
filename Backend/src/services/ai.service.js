@@ -1,10 +1,60 @@
-const { GoogleGenAI } = require("@google/genai")
+const Groq = require("groq-sdk")
 const { z } = require("zod")
 const puppeteer = require("puppeteer")
 
-const ai = new GoogleGenAI({
-    apiKey: process.env.GOOGLE_GENAI_API_KEY
-})
+let groqClient = null
+
+function getGroq() {
+    if (!process.env.GROQ_API_KEY) {
+        throw new Error("GROQ_API_KEY is missing or empty")
+    }
+    if (!groqClient) {
+        groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY })
+    }
+    return groqClient
+}
+
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b"
+
+function toStrictJsonSchema(schema) {
+    const jsonSchema = z.toJSONSchema(schema)
+    delete jsonSchema.$schema
+
+    const strictify = (node) => {
+        if (!node || typeof node !== "object") return
+        if (node.type === "object" && node.properties) {
+            node.additionalProperties = false
+            node.required = Object.keys(node.properties)
+            Object.values(node.properties).forEach(strictify)
+        }
+        if (node.type === "array") strictify(node.items)
+    }
+
+    strictify(jsonSchema)
+    return jsonSchema
+}
+
+async function generateStructuredContent({ name, schema, prompt }) {
+    const response = await getGroq().chat.completions.create({
+        model: GROQ_MODEL,
+        messages: [
+            { role: "user", content: prompt }
+        ],
+        response_format: {
+            type: "json_schema",
+            json_schema: {
+                name,
+                strict: true,
+                schema: toStrictJsonSchema(schema)
+            }
+        }
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error("Groq returned an empty response")
+
+    return schema.parse(JSON.parse(content))
+}
 
 
 const interviewReportSchema = z.object({
@@ -40,18 +90,11 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
                         Job Description: ${jobDescription}
 `
 
-    const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: z.toJSONSchema(interviewReportSchema),
-        }
+    return generateStructuredContent({
+        name: "interview_report",
+        schema: interviewReportSchema,
+        prompt
     })
-
-    return JSON.parse(response.text)
-
-
 }
 
 
@@ -94,22 +137,16 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
                         The resume should not be so lengthy, it should ideally be 1-2 pages long when converted to PDF. Focus on quality rather than quantity and make sure to include all the relevant information that can increase the candidate's chances of getting an interview call for the given job description.
                     `
 
-    const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: z.toJSONSchema(resumePdfSchema),
-        }
+    const { html } = await generateStructuredContent({
+        name: "resume_pdf",
+        schema: resumePdfSchema,
+        prompt
     })
 
-
-    const jsonContent = JSON.parse(response.text)
-
-    const pdfBuffer = await generatePdfFromHtml(jsonContent.html)
+    const pdfBuffer = await generatePdfFromHtml(html)
 
     return pdfBuffer
 
 }
 
-module.exports = { generateInterviewReport, generateResumePdf }
+module.exports = { generateInterviewReport, generateResumePdf, toStrictJsonSchema }
