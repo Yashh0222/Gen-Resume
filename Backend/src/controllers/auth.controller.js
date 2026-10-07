@@ -56,6 +56,7 @@ async function registerUserController(req, res){
  * @access public
  */
 
+
 async function loginUserController(req, res){
     const {email, password} = req.body
 
