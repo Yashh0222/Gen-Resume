@@ -5,6 +5,14 @@ const api = axios.create({
     withCredentials:true
 })
 
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem("token")
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+})
+
 
 
 export async function register({ username, email, password }) {
@@ -14,6 +22,9 @@ export async function register({ username, email, password }) {
             email,
             password
         })
+        if (response.data.token) {
+            localStorage.setItem("token", response.data.token)
+        }
         return response.data
 
     } catch (err) {
@@ -28,6 +39,9 @@ export async function login({email, password}) {
         const response = await api.post("/api/auth/login", {
             email, password
         })
+        if (response.data.token) {
+            localStorage.setItem("token", response.data.token)
+        }
         return response.data
     }catch(err){
         console.log(err)
@@ -42,7 +56,9 @@ export async function logout() {
         return response.data
     }catch(err){
         console.log(err)
-        return err.response.data
+        return err.response?.data
+    }finally{
+        localStorage.removeItem("token")
     }
 }
 
@@ -51,7 +67,9 @@ export async function getMe() {
         const response = await api.get("/api/auth/get-me")
         return response.data
     }catch(err){
-        console.log(err)
-        return err.response.data
+        if (err.response?.status !== 401) {
+            console.log(err)
+        }
+        return err.response?.data
     }
 }
