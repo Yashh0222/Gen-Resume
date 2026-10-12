@@ -5,12 +5,22 @@ const cors = require("cors");
 
 const app = express();
 
+const allowedOrigins = [
+  "https://gen-resume.vercel.app",
+  "http://localhost:5173"
+];
+
 app.use(cors({
-    origin: [
-        "http://localhost:5173",
-        "https://gen-resume.vercel.app/"
-    ],
-    credentials: true
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Origin not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.use(express.json());
