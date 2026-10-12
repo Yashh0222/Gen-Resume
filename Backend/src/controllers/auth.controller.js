@@ -11,20 +11,20 @@ const tokenBlacklistModel = require("../models/blacklist.model");
  * @description  register a newuser, expects username, email
  * @access public 
  */
-async function registerUserController(req, res){
-    
-    const {username, email, password} = req.body;
+async function registerUserController(req, res) {
 
-    if(!username || !email || !password){
-        return res.status(400).json({message: "All fields are required"});
+    const { username, email, password } = req.body;
+
+    if (!username || !email || !password) {
+        return res.status(400).json({ message: "All fields are required" });
     }
 
     const isUserAlreadyExists = await userModel.findOne({
-        $or: [{username}, {email}]
+        $or: [{ username }, { email }]
     })
 
-    if(isUserAlreadyExists){
-        return res.status(409).json({message: "User already exists"})
+    if (isUserAlreadyExists) {
+        return res.status(409).json({ message: "User already exists" })
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -32,22 +32,28 @@ async function registerUserController(req, res){
     const user = await userModel.create({
         username,
         email,
-        password:hash
+        password: hash
     })
 
-    const token = jwt.sign({_id:user._id}, process.env.JWT_SECRET, {expiresIn:"1d"})
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
-    res.cookie("token", token)
+    res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+        path: "/"
+    });
 
     res.status(201).json({
         message: "User registered successfully",
         user: {
-            id : user._id,
-            username : user.username,
-            email : user.email,
+            id: user._id,
+            username: user.username,
+            email: user.email,
         }
     })
-    
+
 }
 
 /**
@@ -57,31 +63,37 @@ async function registerUserController(req, res){
  */
 
 
-async function loginUserController(req, res){
-    const {email, password} = req.body
+async function loginUserController(req, res) {
+    const { email, password } = req.body
 
-    const user = await userModel.findOne({email});
+    const user = await userModel.findOne({ email });
 
-    if(!user){
-        return res.status(404).json({message: "Invalid email or password"})
+    if (!user) {
+        return res.status(404).json({ message: "Invalid email or password" })
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password)
 
-    if(!isPasswordValid){
-        return res.status(401).json({message: "Invalid email or password"})
+    if (!isPasswordValid) {
+        return res.status(401).json({ message: "Invalid email or password" })
     }
 
-    const token = jwt.sign({_id: user._id}, process.env.JWT_SECRET, {expiresIn: "1d"})
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" })
 
-    res.cookie("token", token)
+    res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+        path: "/"
+    });
 
     res.status(201).json({
         message: "User logged in successfully",
         user: {
-            id : user._id,
-            username : user.username,
-            email : user.email,
+            id: user._id,
+            username: user.username,
+            email: user.email,
         }
     })
 
@@ -92,16 +104,21 @@ async function loginUserController(req, res){
  * @description logout a registered user
  * @access public
  */
-async function logoutUserController(req, res){
+async function logoutUserController(req, res) {
     const token = req.cookies.token
-    
-    if(token){
-        await tokenBlacklistModel.create({token});
+
+    if (token) {
+        await tokenBlacklistModel.create({ token });
     }
 
-    res.clearCookie("token");
+    res.clearCookie("token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        path: "/"
+    });
 
-    return res.status(200).json({message: "User logged out successfully"});
+    return res.status(200).json({ message: "User logged out successfully" });
 }
 
 /**
@@ -109,20 +126,20 @@ async function logoutUserController(req, res){
  * @description get current user
  * @access private
  */
-async function getMeController(req, res){
+async function getMeController(req, res) {
     const user = await userModel.findById(req.user._id)
 
     res.status(200).json({
         message: "User fetched successfully",
         user: {
-            id : user._id,
-            username : user.username,
-            email : user.email,
+            id: user._id,
+            username: user.username,
+            email: user.email,
         }
     })
 }
 
-module.exports = { 
+module.exports = {
     registerUserController,
     loginUserController,
     logoutUserController,
