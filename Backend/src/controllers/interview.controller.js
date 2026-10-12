@@ -91,7 +91,7 @@ async function generateResumePdfController(req, res) {
         "Content-Disposition": `attachment; filename=resume_${interviewReportId}.pdf`
     })
 
-    res.send(pdfBuffer)
+    res.send(Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer))
 }
 
 module.exports = { generateInterViewReportController, getInterviewReportByIdController, getAllInterviewReportsController, generateResumePdfController }
