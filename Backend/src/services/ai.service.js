@@ -1,6 +1,6 @@
 const Groq = require("groq-sdk")
 const { z } = require("zod")
-const puppeteer = require("puppeteer")
+const PDFDocument = require("pdfkit")
 
 let groqClient = null
 
@@ -99,36 +99,114 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
 
 
 
-async function generatePdfFromHtml(htmlContent) {
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu"
-        ]
-    })
+function buildResumePdf(data) {
+    return new Promise((resolve, reject) => {
+        try {
+            const doc = new PDFDocument({ size: "A4", margin: 50 })
+            const chunks = []
 
-    try {
-        const page = await browser.newPage()
-        await page.setContent(htmlContent, { waitUntil: "networkidle0" })
+            doc.on("data", (chunk) => chunks.push(chunk))
+            doc.on("end", () => resolve(Buffer.concat(chunks)))
+            doc.on("error", reject)
 
-        const pdfData = await page.pdf({
-            format: "A4", margin: {
-                top: "20mm",
-                bottom: "20mm",
-                left: "15mm",
-                right: "15mm"
+            const BLUE = { r: 74 / 255, g: 144 / 255, b: 226 / 255 }
+            const GRAY = { r: 0.33, g: 0.33, b: 0.33 }
+            const LIGHT = { r: 0.87, g: 0.87, b: 0.87 }
+
+            const sectionHeader = (title) => {
+                doc.moveDown(0.6)
+                doc.fillColor(BLUE).font("Helvetica-Bold").fontSize(13).text(title)
+                const y = doc.y + 2
+                doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.width - doc.page.margins.right, y)
+                doc.strokeColor(LIGHT).lineWidth(1).stroke()
+                doc.y = y + 6
+                doc.moveDown(0.3)
             }
-        })
 
-        // Puppeteer v23+ returns a Uint8Array; Express would JSON-serialize it
-        // and produce a corrupt, unopenable PDF. Always return a Buffer.
-        return Buffer.from(pdfData)
-    } finally {
-        await browser.close()
-    }
+            const bulletList = (items) => {
+                doc.font("Helvetica").fontSize(10).fillColor({ r: 0.2, g: 0.2, b: 0.2 })
+                items.filter(Boolean).forEach((item) => {
+                    doc.text(`• ${item}`, { indent: 10 })
+                })
+            }
+
+            // Header
+            doc.fillColor(BLUE).font("Helvetica-Bold").fontSize(26).text(data.name)
+            const contact = [data.email, data.phone, data.location, ...data.links]
+                .filter(Boolean)
+                .join("  |  ")
+            if (contact) {
+                doc.moveDown(0.2)
+                doc.fillColor(GRAY).font("Helvetica").fontSize(10).text(contact)
+            }
+            const headerLineY = doc.y + 6
+            doc.moveTo(doc.page.margins.left, headerLineY).lineTo(doc.page.width - doc.page.margins.right, headerLineY)
+            doc.strokeColor(BLUE).lineWidth(2).stroke()
+            doc.y = headerLineY + 10
+
+            if (data.summary) {
+                sectionHeader("Summary")
+                doc.font("Helvetica").fontSize(10).fillColor({ r: 0.2, g: 0.2, b: 0.2 }).text(data.summary)
+            }
+
+            if (data.skills.length) {
+                sectionHeader("Skills")
+                doc.font("Helvetica").fontSize(10).fillColor({ r: 0.2, g: 0.2, b: 0.2 })
+                doc.text(data.skills.join("  •  "))
+            }
+
+            if (data.experience.length) {
+                sectionHeader("Experience")
+                data.experience.forEach((exp) => {
+                    doc.font("Helvetica-Bold").fontSize(11).fillColor({ r: 0.1, g: 0.1, b: 0.1 })
+                        .text(`${exp.title} \u2014 ${exp.company}`)
+                    const subtitle = [exp.location, dateRange(exp.startDate, exp.endDate)].filter(Boolean).join(" | ")
+                    if (subtitle) {
+                        doc.font("Helvetica-Oblique").fontSize(9).fillColor(GRAY).text(subtitle)
+                    }
+                    doc.moveDown(0.1)
+                    bulletList(exp.bullets)
+                    doc.moveDown(0.3)
+                })
+            }
+
+            if (data.projects.length) {
+                sectionHeader("Projects")
+                data.projects.forEach((project) => {
+                    doc.font("Helvetica-Bold").fontSize(11).fillColor({ r: 0.1, g: 0.1, b: 0.1 })
+                        .text(project.name)
+                    if (project.description) {
+                        doc.font("Helvetica-Oblique").fontSize(9).fillColor(GRAY).text(project.description)
+                    }
+                    doc.moveDown(0.1)
+                    bulletList(project.bullets)
+                    doc.moveDown(0.3)
+                })
+            }
+
+            if (data.education.length) {
+                sectionHeader("Education")
+                data.education.forEach((edu) => {
+                    doc.font("Helvetica-Bold").fontSize(11).fillColor({ r: 0.1, g: 0.1, b: 0.1 })
+                        .text(`${edu.degree} \u2014 ${edu.institution}`)
+                    const subtitle = [edu.location, dateRange(edu.startDate, edu.endDate)].filter(Boolean).join(" | ")
+                    if (subtitle) {
+                        doc.font("Helvetica-Oblique").fontSize(9).fillColor(GRAY).text(subtitle)
+                    }
+                    doc.moveDown(0.3)
+                })
+            }
+
+            if (data.certifications.length) {
+                sectionHeader("Certifications")
+                bulletList(data.certifications)
+            }
+
+            doc.end()
+        } catch (error) {
+            reject(error)
+        }
+    })
 }
 
 // The model only produces plain resume CONTENT. The HTML/CSS is built here in
@@ -165,97 +243,8 @@ const resumeContentSchema = z.object({
     certifications: z.array(z.string()).describe("Certifications, or an empty array")
 })
 
-function escapeHtml(value) {
-    return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-}
-
 function dateRange(startDate, endDate) {
     return [startDate, endDate].filter(Boolean).join(" \u2013 ")
-}
-
-function buildResumeHtml(data) {
-    const contact = [data.email, data.phone, data.location, ...data.links]
-        .filter(Boolean)
-        .map(escapeHtml)
-        .join(" &nbsp;|&nbsp; ")
-
-    const bullets = (items) => items.filter(Boolean).map((b) => `<li>${escapeHtml(b)}</li>`).join("")
-
-    const summary = data.summary
-        ? `<section class="section"><h2>Summary</h2><p>${escapeHtml(data.summary)}</p></section>`
-        : ""
-
-    const skills = data.skills.length
-        ? `<section class="section"><h2>Skills</h2><ul class="skills">${data.skills.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul></section>`
-        : ""
-
-    const experience = data.experience.length
-        ? `<section class="section"><h2>Experience</h2>${data.experience.map((exp) => `
-            <div class="item">
-                <div class="item-title">${escapeHtml(exp.title)} \u2014 ${escapeHtml(exp.company)}</div>
-                <div class="item-subtitle">${escapeHtml([exp.location, dateRange(exp.startDate, exp.endDate)].filter(Boolean).join(" | "))}</div>
-                <ul>${bullets(exp.bullets)}</ul>
-            </div>`).join("")}</section>`
-        : ""
-
-    const projects = data.projects.length
-        ? `<section class="section"><h2>Projects</h2>${data.projects.map((project) => `
-            <div class="item">
-                <div class="item-title">${escapeHtml(project.name)}</div>
-                <div class="item-subtitle">${escapeHtml(project.description)}</div>
-                <ul>${bullets(project.bullets)}</ul>
-            </div>`).join("")}</section>`
-        : ""
-
-    const education = data.education.length
-        ? `<section class="section"><h2>Education</h2>${data.education.map((edu) => `
-            <div class="item">
-                <div class="item-title">${escapeHtml(edu.degree)} \u2014 ${escapeHtml(edu.institution)}</div>
-                <div class="item-subtitle">${escapeHtml([edu.location, dateRange(edu.startDate, edu.endDate)].filter(Boolean).join(" | "))}</div>
-            </div>`).join("")}</section>`
-        : ""
-
-    const certifications = data.certifications.length
-        ? `<section class="section"><h2>Certifications</h2><ul>${bullets(data.certifications)}</ul></section>`
-        : ""
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>${escapeHtml(data.name)} - Resume</title>
-<style>
-    body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 20px; color: #333; line-height: 1.4; }
-    .header { border-bottom: 2px solid #4A90E2; padding-bottom: 10px; margin-bottom: 20px; }
-    .name { font-size: 28px; font-weight: bold; color: #4A90E2; }
-    .contact { font-size: 13px; margin-top: 5px; color: #555; }
-    .section { margin-bottom: 15px; }
-    .section h2 { font-size: 17px; color: #4A90E2; border-bottom: 1px solid #ddd; padding-bottom: 3px; margin-bottom: 8px; }
-    .section p { margin: 0; }
-    .item { margin-bottom: 10px; }
-    .item-title { font-weight: bold; }
-    .item-subtitle { font-style: italic; font-size: 13px; color: #555; margin-bottom: 3px; }
-    ul { margin: 4px 0 0 18px; padding: 0; }
-    li { margin-bottom: 3px; }
-    .skills { list-style: none; margin-left: 0; column-count: 2; }
-</style>
-</head>
-<body>
-    <div class="header">
-        <div class="name">${escapeHtml(data.name)}</div>
-        <div class="contact">${contact}</div>
-    </div>
-    ${summary}
-    ${skills}
-    ${experience}
-    ${projects}
-    ${education}
-    ${certifications}
-</body>
-</html>`
 }
 
 async function generateResumePdf({ resume, selfDescription, jobDescription }) {
@@ -279,9 +268,7 @@ Produce concise, ATS-friendly resume content tailored to the job description. Hi
         prompt
     })
 
-    const html = buildResumeHtml(data)
-
-    return generatePdfFromHtml(html)
+    return buildResumePdf(data)
 }
 
-module.exports = { generateInterviewReport, generateResumePdf, toStrictJsonSchema }
+module.exports = { generateInterviewReport, generateResumePdf, buildResumePdf, toStrictJsonSchema }
